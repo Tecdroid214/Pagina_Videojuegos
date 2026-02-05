@@ -18,20 +18,23 @@ io.on("connection", socket => {
 
   socket.on("createRoom", (color) => {
     const roomId = generateRoomId();
+
     rooms[roomId] = {
       owner: socket.id,
+      mode: "lobby",
       players: {}
     };
 
     rooms[roomId].players[socket.id] = {
-      x: 300,
+      x: 400,
       y: 300,
       color,
       hp: 100
     };
 
     socket.join(roomId);
-    socket.emit("roomCreated", roomId);
+    socket.emit("roomCreated", { roomId, owner: socket.id });
+    io.to(roomId).emit("updatePlayers", rooms[roomId].players);
   });
 
   socket.on("joinRoom", ({ roomId, color }) => {
@@ -41,7 +44,7 @@ io.on("connection", socket => {
     }
 
     rooms[roomId].players[socket.id] = {
-      x: 300,
+      x: 400,
       y: 300,
       color,
       hp: 100
@@ -52,10 +55,37 @@ io.on("connection", socket => {
   });
 
   socket.on("move", ({ roomId, x, y }) => {
-    if (rooms[roomId]) {
+    if (rooms[roomId]?.players[socket.id]) {
       rooms[roomId].players[socket.id].x = x;
       rooms[roomId].players[socket.id].y = y;
       io.to(roomId).emit("updatePlayers", rooms[roomId].players);
+    }
+  });
+
+  socket.on("changeColor", ({ roomId, color }) => {
+    if (rooms[roomId]?.players[socket.id]) {
+      rooms[roomId].players[socket.id].color = color;
+      io.to(roomId).emit("updatePlayers", rooms[roomId].players);
+    }
+  });
+
+  socket.on("shoot", ({ roomId, targetId, damage }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    if (room.players[targetId]) {
+      room.players[targetId].hp -= damage;
+      if (room.players[targetId].hp < 0) {
+        room.players[targetId].hp = 0;
+      }
+      io.to(roomId).emit("updatePlayers", room.players);
+    }
+  });
+
+  socket.on("startGame", ({ roomId, mode }) => {
+    if (rooms[roomId]?.owner === socket.id) {
+      rooms[roomId].mode = mode;
+      io.to(roomId).emit("gameStarted", mode);
     }
   });
 
@@ -76,10 +106,7 @@ io.on("connection", socket => {
     for (const roomId in rooms) {
       if (rooms[roomId].players[socket.id]) {
         delete rooms[roomId].players[socket.id];
-        if (Object.keys(rooms[roomId].players).length < 2) {
-          delete rooms[roomId];
-          io.to(roomId).emit("roomClosed");
-        }
+        io.to(roomId).emit("updatePlayers", rooms[roomId].players);
       }
     }
   });
@@ -87,5 +114,5 @@ io.on("connection", socket => {
 });
 
 server.listen(3000, () => {
-  console.log("Servidor en http://localhost:3000");
+  console.log("Servidor corriendo en puerto 3000");
 });

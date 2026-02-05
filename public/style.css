@@ -1,17 +1,52 @@
 body {
-  background: #111;
+  margin: 0;
+  background: linear-gradient(135deg, #141e30, #243b55);
   color: white;
-  font-family: Arial;
+  font-family: 'Segoe UI', sans-serif;
   text-align: center;
 }
 
-canvas {
-  background: #222;
+h1 {
   margin-top: 10px;
 }
 
-button {
-  margin: 5px;
-  padding: 8px;
+#menu, #room {
+  background: rgba(0,0,0,0.4);
+  padding: 15px;
+  border-radius: 12px;
+  width: fit-content;
+  margin: 10px auto;
 }
 
+button {
+  background: #00c6ff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 14px;
+  margin: 5px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+button:hover {
+  background: #0072ff;
+}
+
+button:disabled {
+  background: #555;
+  cursor: not-allowed;
+}
+
+input {
+  padding: 6px;
+  border-radius: 6px;
+  border: none;
+}
+
+canvas {
+  display: block;
+  margin: 15px auto;
+  background: #1e1e1e;
+  border-radius: 12px;
+  box-shadow: 0 0 20px rgba(0,0,0,.6);
+}

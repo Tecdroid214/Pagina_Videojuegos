@@ -7,6 +7,8 @@
 </head>
 <body>
 
+<h1>🎮 Mini Juegos Online</h1>
+
 <div id="menu">
   <input type="color" id="colorPicker">
   <button id="create">Crear Sala</button>
@@ -18,6 +20,13 @@
   <p>ID Sala: <span id="roomId"></span></p>
   <button id="copy">Copiar ID</button>
   <button id="leave">Salir</button>
+
+  <div id="gameSelect" hidden>
+    <h3>Elegir modo</h3>
+    <button onclick="startGame('shoot')">🔫 Disparos</button>
+    <button disabled>🧗 Plataformas</button>
+    <button disabled>🥊 Combate</button>
+  </div>
 </div>
 
 <canvas id="game" width="800" height="600"></canvas>
