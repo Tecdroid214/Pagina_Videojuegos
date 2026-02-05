@@ -142,7 +142,7 @@ function updateMovement() {
   
   let moved = false;
   const player = players[myId];
-  const speed = 5;
+  const speed = 15;
   
   // Copiar la posición actual
   let newX = player.x;
