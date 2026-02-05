@@ -1,38 +1,59 @@
 const socket = io();
-
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
-const roomInput = document.getElementById("roomInput");
-const createBtn = document.getElementById("createBtn");
-const joinBtn = document.getElementById("joinBtn");
-const colorPicker = document.getElementById("colorPicker");
-
+let roomId = null;
 let players = {};
 let myId = null;
 let myPlayer = null;
-let roomId = null;
+let currentMode = "lobby";
+let ownerId = null;
 
-// INPUTS
-let input = { up:false, down:false, left:false, right:false };
-
-createBtn.onclick = () => {
-  roomId = roomInput.value;
-  socket.emit("createRoom", roomId);
-};
-
-joinBtn.onclick = () => {
-  roomId = roomInput.value;
-  socket.emit("joinRoom", roomId);
-};
+// INPUT STATE
+const input = { up:false, down:false, left:false, right:false };
 
 socket.on("connect", () => {
   myId = socket.id;
 });
 
+create.onclick = () => {
+  socket.emit("createRoom", colorPicker.value);
+};
+
+join.onclick = () => {
+  socket.emit("joinRoom", {
+    roomId: roomInput.value,
+    color: colorPicker.value
+  });
+};
+
+leave.onclick = () => {
+  socket.emit("leaveRoom");
+  location.reload();
+};
+
+copy.onclick = () => {
+  navigator.clipboard.writeText(roomId);
+};
+
+colorPicker.addEventListener("input", () => {
+  socket.emit("changeColor", { color: colorPicker.value });
+});
+
+socket.on("roomCreated", data => {
+  roomId = data.roomId;
+  ownerId = data.owner;
+  room.hidden = false;
+  document.getElementById("roomId").textContent = roomId;
+});
+
 socket.on("updatePlayers", data => {
   players = data;
   myPlayer = players[myId];
+
+  if (Object.keys(players).length >= 2 && myId === ownerId) {
+    gameSelect.hidden = false;
+  }
 });
 
 // MOVIMIENTO SIN TEMBLOR
@@ -51,29 +72,48 @@ document.addEventListener("keyup", e => {
 });
 
 setInterval(() => {
-  if (!myPlayer || !roomId) return;
+  if (!myPlayer) return;
 
-  let nx = myPlayer.x;
-  let ny = myPlayer.y;
+  let x = myPlayer.x;
+  let y = myPlayer.y;
 
-  if (input.up) ny -= 5;
-  if (input.down) ny += 5;
-  if (input.left) nx -= 5;
-  if (input.right) nx += 5;
+  if (input.up) y -= 5;
+  if (input.down) y += 5;
+  if (input.left) x -= 5;
+  if (input.right) x += 5;
 
-  socket.emit("move", { roomId, x: nx, y: ny });
+  socket.emit("move", { x, y });
 }, 50);
 
-// COLOR EN TIEMPO REAL
-colorPicker.addEventListener("input", () => {
-  if (!roomId) return;
-  socket.emit("changeColor", {
-    roomId,
-    color: colorPicker.value
-  });
+// DISPAROS (SIN CAMBIOS)
+canvas.addEventListener("click", () => {
+  if (currentMode !== "shoot" || !myPlayer) return;
+
+  for (const id in players) {
+    if (id === myId) continue;
+
+    const p = players[id];
+    const dist = Math.hypot(p.x - myPlayer.x, p.y - myPlayer.y);
+
+    if (dist < 200) {
+      socket.emit("shoot", {
+        targetId: id,
+        damage: Math.max(5, 50 - dist / 4)
+      });
+      break;
+    }
+  }
 });
 
-// RENDER CORRECTO (todos se mueven bien)
+socket.on("gameStarted", mode => {
+  currentMode = mode;
+});
+
+socket.on("roomClosed", () => {
+  alert("Sala cerrada");
+  location.reload();
+});
+
 function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -81,6 +121,9 @@ function draw() {
     const p = players[id];
     ctx.fillStyle = p.color;
     ctx.fillRect(p.x, p.y, 30, 30);
+
+    ctx.fillStyle = "white";
+    ctx.fillText(p.hp, p.x, p.y - 5);
   }
 
   requestAnimationFrame(draw);
