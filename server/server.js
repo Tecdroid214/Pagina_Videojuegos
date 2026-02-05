@@ -30,7 +30,7 @@ function getRandomPosition() {
 io.on("connection", socket => {
   console.log("Nueva conexión:", socket.id);
 
-  socket.on("createRoom", (color) => {
+  socket.on("createRoom", ({ color, name }) => {
     const roomId = generateRoomId();
     const position = getRandomPosition();
 
@@ -44,11 +44,12 @@ io.on("connection", socket => {
       x: position.x,
       y: position.y,
       color: color,
+      name: name || "Jugador",
       hp: 100
     };
 
     socket.join(roomId);
-    console.log(`Sala ${roomId} creada por ${socket.id}`);
+    console.log(`Sala ${roomId} creada por ${socket.id} (${name})`);
     
     // Solo al creador le enviamos roomCreated
     socket.emit("roomCreated", { 
@@ -60,8 +61,8 @@ io.on("connection", socket => {
     io.to(roomId).emit("updatePlayers", rooms[roomId].players);
   });
 
-  socket.on("joinRoom", ({ roomId, color }) => {
-    console.log(`Intentando unir ${socket.id} a sala ${roomId}`);
+  socket.on("joinRoom", ({ roomId, color, name }) => {
+    console.log(`Intentando unir ${socket.id} (${name}) a sala ${roomId}`);
     
     if (!rooms[roomId]) {
       socket.emit("errorMsg", "Sala no encontrada");
@@ -83,11 +84,12 @@ io.on("connection", socket => {
       x: position.x,
       y: position.y,
       color: color,
+      name: name || "Jugador",
       hp: 100
     };
 
     socket.join(roomId);
-    console.log(`${socket.id} se unió a sala ${roomId}`);
+    console.log(`${socket.id} (${name}) se unió a sala ${roomId}`);
     
     // IMPORTANTE: Enviar evento joinedRoom al jugador que se unió
     socket.emit("joinedRoom", {
@@ -106,7 +108,7 @@ io.on("connection", socket => {
       return;
     }
 
-    console.log(`Movimiento de ${socket.id} en sala ${roomId}: x=${x}, y=${y}`);
+    console.log(`Movimiento de ${socket.id} (${room.players[socket.id].name}) en sala ${roomId}: x=${x}, y=${y}`);
     
     // Actualizar posición
     room.players[socket.id].x = x;
@@ -119,7 +121,7 @@ io.on("connection", socket => {
   socket.on("changeColor", ({ roomId, color }) => {
     const room = rooms[roomId];
     if (room?.players[socket.id]) {
-      console.log(`${socket.id} cambió color a ${color} en sala ${roomId}`);
+      console.log(`${socket.id} (${room.players[socket.id].name}) cambió color a ${color} en sala ${roomId}`);
       room.players[socket.id].color = color;
       io.to(roomId).emit("updatePlayers", room.players);
     }
@@ -130,7 +132,7 @@ io.on("connection", socket => {
     if (!room) return;
 
     if (room.players[targetId]) {
-      console.log(`${socket.id} disparó a ${targetId} por ${damage} de daño`);
+      console.log(`${socket.id} (${room.players[socket.id]?.name}) disparó a ${targetId} (${room.players[targetId]?.name}) por ${damage} de daño`);
       room.players[targetId].hp -= damage;
       if (room.players[targetId].hp < 0) {
         room.players[targetId].hp = 0;
@@ -151,6 +153,7 @@ io.on("connection", socket => {
     console.log(`${socket.id} dejando sala ${roomId}`);
     
     if (rooms[roomId]) {
+      const playerName = rooms[roomId].players[socket.id]?.name || "Jugador";
       delete rooms[roomId].players[socket.id];
       socket.leave(roomId);
 
@@ -163,7 +166,7 @@ io.on("connection", socket => {
         if (rooms[roomId].owner === socket.id) {
           const newOwner = Object.keys(rooms[roomId].players)[0];
           rooms[roomId].owner = newOwner;
-          console.log(`Nuevo owner de sala ${roomId}: ${newOwner}`);
+          console.log(`Nuevo owner de sala ${roomId}: ${newOwner} (${rooms[roomId].players[newOwner]?.name})`);
           
           // Notificar al nuevo owner
           io.to(newOwner).emit("roomCreated", { 
@@ -183,6 +186,7 @@ io.on("connection", socket => {
     
     for (const roomId in rooms) {
       if (rooms[roomId].players[socket.id]) {
+        const playerName = rooms[roomId].players[socket.id]?.name || "Jugador";
         delete rooms[roomId].players[socket.id];
         
         if (Object.keys(rooms[roomId].players).length === 0) {
@@ -193,7 +197,7 @@ io.on("connection", socket => {
           if (rooms[roomId].owner === socket.id) {
             const newOwner = Object.keys(rooms[roomId].players)[0];
             rooms[roomId].owner = newOwner;
-            console.log(`Nuevo owner de sala ${roomId}: ${newOwner}`);
+            console.log(`Nuevo owner de sala ${roomId}: ${newOwner} (${rooms[roomId].players[newOwner]?.name})`);
             
             // Notificar al nuevo owner
             io.to(newOwner).emit("roomCreated", { 

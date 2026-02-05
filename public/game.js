@@ -16,6 +16,17 @@ const UPDATE_RATE = 1000 / 60; // 60 FPS
 // Variable para rastrear si estoy en una sala
 let inRoom = false;
 
+// Variable para el nombre del jugador
+let playerName = "Jugador";
+
+// Obtener el input del nombre
+const playerNameInput = document.getElementById("playerName");
+
+// Actualizar nombre cuando se escribe
+playerNameInput.addEventListener("input", () => {
+  playerName = playerNameInput.value.trim() || "Jugador";
+});
+
 socket.on("connect", () => {
   myId = socket.id;
   console.log("Conectado con ID:", myId);
@@ -23,14 +34,17 @@ socket.on("connect", () => {
 
 create.onclick = () => {
   const color = colorPicker.value;
-  console.log("Creando sala con color:", color);
-  socket.emit("createRoom", color);
+  const name = playerNameInput.value.trim() || "Jugador";
+  console.log("Creando sala con color:", color, "y nombre:", name);
+  socket.emit("createRoom", { color, name });
 };
 
 join.onclick = () => {
   const color = colorPicker.value;
+  const name = playerNameInput.value.trim() || "Jugador";
   const roomToJoin = roomInput.value.trim();
-  console.log("Intentando unirse a sala:", roomToJoin, "con color:", color);
+  
+  console.log("Intentando unirse a sala:", roomToJoin, "con color:", color, "y nombre:", name);
   
   if (!roomToJoin) {
     alert("Ingresa un ID de sala");
@@ -39,7 +53,8 @@ join.onclick = () => {
   
   socket.emit("joinRoom", {
     roomId: roomToJoin,
-    color: color
+    color: color,
+    name: name
   });
 };
 
@@ -258,15 +273,32 @@ function draw() {
     
     // Dibujar información del jugador
     ctx.fillStyle = "white";
-    ctx.font = "10px Arial";
+    ctx.font = "12px Arial";
     ctx.textAlign = "center";
     
-    // Nombre/ID abreviado
-    const shortId = id.substring(0, 5);
-    ctx.fillText(shortId, p.x + 15, p.y - 5);
+    // Nombre del jugador (si existe) o ID abreviado
+    let displayName = p.name || id.substring(0, 5);
     
-    // HP
+    // Si el nombre es muy largo, acortarlo
+    if (displayName.length > 10) {
+      displayName = displayName.substring(0, 10) + "...";
+    }
+    
+    // Dibujar nombre arriba del cubo
+    ctx.fillStyle = "white";
+    ctx.fillText(displayName, p.x + 15, p.y - 10);
+    
+    // HP debajo del cubo
+    ctx.fillStyle = "#ff4444";
+    ctx.font = "10px Arial";
     ctx.fillText(`HP: ${p.hp}`, p.x + 15, p.y + 45);
+    
+    // Si soy el owner, mostrar "(Owner)"
+    if (id === ownerId) {
+      ctx.fillStyle = "#00ff00";
+      ctx.font = "9px Arial";
+      ctx.fillText("(Owner)", p.x + 15, p.y + 60);
+    }
   }
   
   // Dibujar información de debug

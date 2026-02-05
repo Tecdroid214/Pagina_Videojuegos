@@ -41,6 +41,11 @@ input {
   padding: 6px;
   border-radius: 6px;
   border: none;
+  margin: 5px;
+}
+
+#playerName {
+  width: 120px;
 }
 
 canvas {
