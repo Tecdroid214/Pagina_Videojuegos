@@ -32,15 +32,16 @@ io.on("connection", socket => {
       hp: 100
     };
 
-    socket.data.roomId = roomId;
     socket.join(roomId);
-
-    socket.emit("roomJoined", { roomId, owner: socket.id });
+    socket.emit("roomCreated", { roomId, owner: socket.id });
     io.to(roomId).emit("updatePlayers", rooms[roomId].players);
   });
 
   socket.on("joinRoom", ({ roomId, color }) => {
-    if (!rooms[roomId] || Object.keys(rooms[roomId].players).length >= 4) return;
+    if (!rooms[roomId] || Object.keys(rooms[roomId].players).length >= 4) {
+      socket.emit("errorMsg", "Sala inválida o llena");
+      return;
+    }
 
     rooms[roomId].players[socket.id] = {
       x: 400,
@@ -49,42 +50,67 @@ io.on("connection", socket => {
       hp: 100
     };
 
-    socket.data.roomId = roomId;
     socket.join(roomId);
-
-    socket.emit("roomJoined", {
-      roomId,
-      owner: rooms[roomId].owner
-    });
-
     io.to(roomId).emit("updatePlayers", rooms[roomId].players);
   });
 
-  socket.on("move", ({ x, y }) => {
-    const roomId = socket.data.roomId;
-    if (!rooms[roomId]?.players[socket.id]) return;
-
-    rooms[roomId].players[socket.id].x = x;
-    rooms[roomId].players[socket.id].y = y;
-
-    io.to(roomId).emit("updatePlayers", rooms[roomId].players);
+  socket.on("move", ({ roomId, x, y }) => {
+    if (rooms[roomId]?.players[socket.id]) {
+      rooms[roomId].players[socket.id].x = x;
+      rooms[roomId].players[socket.id].y = y;
+      io.to(roomId).emit("updatePlayers", rooms[roomId].players);
+    }
   });
 
-  socket.on("changeColor", ({ color }) => {
-    const roomId = socket.data.roomId;
-    if (!rooms[roomId]?.players[socket.id]) return;
+  socket.on("changeColor", ({ roomId, color }) => {
+    if (rooms[roomId]?.players[socket.id]) {
+      rooms[roomId].players[socket.id].color = color;
+      io.to(roomId).emit("updatePlayers", rooms[roomId].players);
+    }
+  });
 
-    rooms[roomId].players[socket.id].color = color;
-    io.to(roomId).emit("updatePlayers", rooms[roomId].players);
+  socket.on("shoot", ({ roomId, targetId, damage }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    if (room.players[targetId]) {
+      room.players[targetId].hp -= damage;
+      if (room.players[targetId].hp < 0) {
+        room.players[targetId].hp = 0;
+      }
+      io.to(roomId).emit("updatePlayers", room.players);
+    }
+  });
+
+  socket.on("startGame", ({ roomId, mode }) => {
+    if (rooms[roomId]?.owner === socket.id) {
+      rooms[roomId].mode = mode;
+      io.to(roomId).emit("gameStarted", mode);
+    }
+  });
+
+  socket.on("leaveRoom", (roomId) => {
+    if (rooms[roomId]) {
+      delete rooms[roomId].players[socket.id];
+
+      if (Object.keys(rooms[roomId].players).length < 2) {
+        delete rooms[roomId];
+        io.to(roomId).emit("roomClosed");
+      } else {
+        io.to(roomId).emit("updatePlayers", rooms[roomId].players);
+      }
+    }
   });
 
   socket.on("disconnect", () => {
-    const roomId = socket.data.roomId;
-    if (!rooms[roomId]) return;
-
-    delete rooms[roomId].players[socket.id];
-    io.to(roomId).emit("updatePlayers", rooms[roomId].players);
+    for (const roomId in rooms) {
+      if (rooms[roomId].players[socket.id]) {
+        delete rooms[roomId].players[socket.id];
+        io.to(roomId).emit("updatePlayers", rooms[roomId].players);
+      }
+    }
   });
+
 });
 
 server.listen(3000, () => {
