@@ -32,18 +32,15 @@ io.on("connection", socket => {
       hp: 100
     };
 
-    socket.data.roomId = roomId; // ✅ CLAVE
+    socket.data.roomId = roomId;
     socket.join(roomId);
 
-    socket.emit("roomCreated", { roomId, owner: socket.id });
+    socket.emit("roomJoined", { roomId, owner: socket.id });
     io.to(roomId).emit("updatePlayers", rooms[roomId].players);
   });
 
   socket.on("joinRoom", ({ roomId, color }) => {
-    if (!rooms[roomId] || Object.keys(rooms[roomId].players).length >= 4) {
-      socket.emit("errorMsg", "Sala inválida o llena");
-      return;
-    }
+    if (!rooms[roomId] || Object.keys(rooms[roomId].players).length >= 4) return;
 
     rooms[roomId].players[socket.id] = {
       x: 400,
@@ -52,8 +49,13 @@ io.on("connection", socket => {
       hp: 100
     };
 
-    socket.data.roomId = roomId; // ✅ CLAVE
+    socket.data.roomId = roomId;
     socket.join(roomId);
+
+    socket.emit("roomJoined", {
+      roomId,
+      owner: rooms[roomId].owner
+    });
 
     io.to(roomId).emit("updatePlayers", rooms[roomId].players);
   });
@@ -74,37 +76,6 @@ io.on("connection", socket => {
 
     rooms[roomId].players[socket.id].color = color;
     io.to(roomId).emit("updatePlayers", rooms[roomId].players);
-  });
-
-  socket.on("shoot", ({ targetId, damage }) => {
-    const roomId = socket.data.roomId;
-    const room = rooms[roomId];
-    if (!room || !room.players[targetId]) return;
-
-    room.players[targetId].hp = Math.max(0, room.players[targetId].hp - damage);
-    io.to(roomId).emit("updatePlayers", room.players);
-  });
-
-  socket.on("startGame", ({ mode }) => {
-    const roomId = socket.data.roomId;
-    if (rooms[roomId]?.owner === socket.id) {
-      rooms[roomId].mode = mode;
-      io.to(roomId).emit("gameStarted", mode);
-    }
-  });
-
-  socket.on("leaveRoom", () => {
-    const roomId = socket.data.roomId;
-    if (!rooms[roomId]) return;
-
-    delete rooms[roomId].players[socket.id];
-
-    if (Object.keys(rooms[roomId].players).length < 2) {
-      delete rooms[roomId];
-      io.to(roomId).emit("roomClosed");
-    } else {
-      io.to(roomId).emit("updatePlayers", rooms[roomId].players);
-    }
   });
 
   socket.on("disconnect", () => {
