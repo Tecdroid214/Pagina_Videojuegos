@@ -50,12 +50,13 @@ io.on("connection", socket => {
     socket.join(roomId);
     console.log(`Sala ${roomId} creada por ${socket.id}`);
     
+    // Solo al creador le enviamos roomCreated
     socket.emit("roomCreated", { 
       roomId, 
       owner: socket.id 
     });
     
-    // Emitir a TODOS en la sala (incluyendo al creador)
+    // A todos en la sala les enviamos updatePlayers
     io.to(roomId).emit("updatePlayers", rooms[roomId].players);
   });
 
@@ -88,6 +89,12 @@ io.on("connection", socket => {
     socket.join(roomId);
     console.log(`${socket.id} se unió a sala ${roomId}`);
     
+    // IMPORTANTE: Enviar evento joinedRoom al jugador que se unió
+    socket.emit("joinedRoom", {
+      roomId: roomId,
+      ownerId: rooms[roomId].owner // Enviar el ID del owner
+    });
+    
     // Notificar a TODOS en la sala sobre el nuevo jugador
     io.to(roomId).emit("updatePlayers", rooms[roomId].players);
   });
@@ -99,23 +106,22 @@ io.on("connection", socket => {
       return;
     }
 
+    console.log(`Movimiento de ${socket.id} en sala ${roomId}: x=${x}, y=${y}`);
+    
     // Actualizar posición
     room.players[socket.id].x = x;
     room.players[socket.id].y = y;
     
-    // Emitir a TODOS los jugadores en la sala (excepto al que se movió)
-    socket.to(roomId).emit("updatePlayers", room.players);
-    
-    // Emitir solo al jugador que se movió (para mantener sincronización)
-    socket.emit("updatePlayers", room.players);
+    // IMPORTANTE: Cambio aquí - Emitir a TODOS en la sala
+    io.to(roomId).emit("updatePlayers", room.players);
   });
 
   socket.on("changeColor", ({ roomId, color }) => {
     const room = rooms[roomId];
     if (room?.players[socket.id]) {
+      console.log(`${socket.id} cambió color a ${color} en sala ${roomId}`);
       room.players[socket.id].color = color;
       io.to(roomId).emit("updatePlayers", room.players);
-      console.log(`${socket.id} cambió color a ${color} en sala ${roomId}`);
     }
   });
 
@@ -124,6 +130,7 @@ io.on("connection", socket => {
     if (!room) return;
 
     if (room.players[targetId]) {
+      console.log(`${socket.id} disparó a ${targetId} por ${damage} de daño`);
       room.players[targetId].hp -= damage;
       if (room.players[targetId].hp < 0) {
         room.players[targetId].hp = 0;
@@ -187,6 +194,12 @@ io.on("connection", socket => {
             const newOwner = Object.keys(rooms[roomId].players)[0];
             rooms[roomId].owner = newOwner;
             console.log(`Nuevo owner de sala ${roomId}: ${newOwner}`);
+            
+            // Notificar al nuevo owner
+            io.to(newOwner).emit("roomCreated", { 
+              roomId, 
+              owner: newOwner 
+            });
           }
           
           io.to(roomId).emit("updatePlayers", rooms[roomId].players);

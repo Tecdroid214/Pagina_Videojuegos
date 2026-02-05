@@ -13,19 +13,30 @@ let keys = {};
 let lastUpdate = 0;
 const UPDATE_RATE = 1000 / 60; // 60 FPS
 
+// Variable para rastrear si estoy en una sala
+let inRoom = false;
+
 socket.on("connect", () => {
   myId = socket.id;
   console.log("Conectado con ID:", myId);
 });
 
 create.onclick = () => {
-  socket.emit("createRoom", colorPicker.value);
+  const color = colorPicker.value;
+  console.log("Creando sala con color:", color);
+  socket.emit("createRoom", color);
 };
 
 join.onclick = () => {
   const color = colorPicker.value;
-  const roomToJoin = roomInput.value;
+  const roomToJoin = roomInput.value.trim();
   console.log("Intentando unirse a sala:", roomToJoin, "con color:", color);
+  
+  if (!roomToJoin) {
+    alert("Ingresa un ID de sala");
+    return;
+  }
+  
   socket.emit("joinRoom", {
     roomId: roomToJoin,
     color: color
@@ -39,10 +50,11 @@ leave.onclick = () => {
 
 copy.onclick = () => {
   navigator.clipboard.writeText(roomId);
+  alert("ID copiado al portapapeles!");
 };
 
 colorPicker.addEventListener("input", () => {
-  if (roomId && myId) {
+  if (roomId && myId && inRoom) {
     console.log("Cambiando color a:", colorPicker.value);
     socket.emit("changeColor", {
       roomId,
@@ -51,28 +63,53 @@ colorPicker.addEventListener("input", () => {
   }
 });
 
+// Evento cuando la sala es creada (solo para el creador)
 socket.on("roomCreated", data => {
   roomId = data.roomId;
   ownerId = data.owner;
+  inRoom = true;
+  
   room.hidden = false;
   document.getElementById("roomId").textContent = roomId;
-  console.log("Sala creada:", roomId, "Owner:", ownerId);
+  console.log("Sala creada:", roomId, "Yo soy el owner:", ownerId);
+});
+
+// Evento cuando un jugador se une exitosamente a una sala
+socket.on("joinedRoom", data => {
+  roomId = data.roomId;
+  ownerId = data.ownerId; // Ahora recibimos el ownerId
+  inRoom = true;
+  
+  room.hidden = false;
+  document.getElementById("roomId").textContent = roomId;
+  console.log("Unido a sala:", roomId, "Owner es:", ownerId);
 });
 
 socket.on("updatePlayers", data => {
   players = data;
-  console.log("Jugadores actualizados:", players);
+  console.log("Jugadores actualizados. Mi ID:", myId, "Players:", players);
+  
+  // Verificar si estoy en la lista de jugadores
+  if (!players[myId]) {
+    console.log("ADVERTENCIA: No estoy en la lista de jugadores aún");
+    return;
+  }
   
   // Mostrar opción de iniciar juego solo si hay al menos 2 jugadores y soy el owner
   if (Object.keys(players).length >= 2 && myId === ownerId) {
     gameSelect.hidden = false;
+    console.log("Mostrando botón de iniciar juego - Soy el owner");
   } else {
     gameSelect.hidden = true;
   }
+  
+  // Mostrar información de debug en pantalla
+  drawDebugInfo();
 });
 
 socket.on("errorMsg", (msg) => {
   alert(msg);
+  console.error("Error del servidor:", msg);
 });
 
 socket.on("gameStarted", mode => {
@@ -87,17 +124,21 @@ socket.on("roomClosed", () => {
 
 // Manejo mejorado de teclas
 document.addEventListener("keydown", (e) => {
-  keys[e.key] = true;
+  if (!inRoom) return;
+  keys[e.key.toLowerCase()] = true;
 });
 
 document.addEventListener("keyup", (e) => {
-  keys[e.key] = false;
+  if (!inRoom) return;
+  keys[e.key.toLowerCase()] = false;
 });
 
 // Función de movimiento optimizada
 function updateMovement() {
   const now = Date.now();
-  if (now - lastUpdate < UPDATE_RATE || !roomId || !players[myId]) return;
+  if (now - lastUpdate < UPDATE_RATE || !roomId || !inRoom || !players[myId]) {
+    return;
+  }
   
   let moved = false;
   const player = players[myId];
@@ -108,19 +149,19 @@ function updateMovement() {
   let newY = player.y;
   
   // Actualizar posición basada en teclas presionadas
-  if (keys["w"] || keys["ArrowUp"]) {
+  if (keys["w"] || keys["arrowup"]) {
     newY -= speed;
     moved = true;
   }
-  if (keys["s"] || keys["ArrowDown"]) {
+  if (keys["s"] || keys["arrowdown"]) {
     newY += speed;
     moved = true;
   }
-  if (keys["a"] || keys["ArrowLeft"]) {
+  if (keys["a"] || keys["arrowleft"]) {
     newX -= speed;
     moved = true;
   }
-  if (keys["d"] || keys["ArrowRight"]) {
+  if (keys["d"] || keys["arrowright"]) {
     newX += speed;
     moved = true;
   }
@@ -131,6 +172,7 @@ function updateMovement() {
   
   // Solo emitir si hubo movimiento
   if (moved && (newX !== player.x || newY !== player.y)) {
+    console.log("Emitting move to:", roomId, "Position:", newX, newY);
     socket.emit("move", {
       roomId,
       x: newX,
@@ -167,31 +209,68 @@ canvas.addEventListener("click", () => {
 
 function startGame(mode) {
   if (roomId && myId === ownerId) {
+    console.log("Iniciando juego en modo:", mode);
     socket.emit("startGame", { roomId, mode });
+  } else {
+    console.log("No puedo iniciar juego. OwnerId:", ownerId, "MyId:", myId);
   }
+}
+
+function drawDebugInfo() {
+  // Esta función dibujará información de debug en el canvas
+  // Puedes removerla en producción
+  ctx.fillStyle = "white";
+  ctx.font = "12px Arial";
+  ctx.fillText(`Mi ID: ${myId ? myId.substring(0, 8) : 'N/A'}`, 10, 20);
+  ctx.fillText(`Owner ID: ${ownerId ? ownerId.substring(0, 8) : 'N/A'}`, 10, 40);
+  ctx.fillText(`Soy owner: ${myId === ownerId ? 'Sí' : 'No'}`, 10, 60);
+  ctx.fillText(`Jugadores: ${Object.keys(players).length}`, 10, 80);
+  ctx.fillText(`En sala: ${inRoom ? 'Sí' : 'No'}`, 10, 100);
 }
 
 function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+  
+  // Dibujar fondo
+  ctx.fillStyle = "#2c3e50";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+  // Dibujar a todos los jugadores
   for (const id in players) {
     const p = players[id];
+    
+    // Dibujar cuerpo del jugador
     ctx.fillStyle = p.color;
     ctx.fillRect(p.x, p.y, 30, 30);
     
-    // Dibujar ID del jugador
-    ctx.fillStyle = "white";
-    ctx.font = "12px Arial";
-    ctx.fillText(`ID: ${id.substring(0, 5)}`, p.x, p.y - 20);
-    ctx.fillText(`HP: ${p.hp}`, p.x, p.y - 5);
-    
-    // Resaltar al jugador actual
+    // Dibujar borde para identificar jugadores
     if (id === myId) {
+      // Jugador local - borde amarillo
       ctx.strokeStyle = "yellow";
+      ctx.lineWidth = 3;
+      ctx.strokeRect(p.x - 2, p.y - 2, 34, 34);
+    } else if (id === ownerId) {
+      // Owner - borde verde
+      ctx.strokeStyle = "#00ff00";
       ctx.lineWidth = 2;
       ctx.strokeRect(p.x, p.y, 30, 30);
     }
+    
+    // Dibujar información del jugador
+    ctx.fillStyle = "white";
+    ctx.font = "10px Arial";
+    ctx.textAlign = "center";
+    
+    // Nombre/ID abreviado
+    const shortId = id.substring(0, 5);
+    ctx.fillText(shortId, p.x + 15, p.y - 5);
+    
+    // HP
+    ctx.fillText(`HP: ${p.hp}`, p.x + 15, p.y + 45);
   }
+  
+  // Dibujar información de debug
+  drawDebugInfo();
 }
 
 // Bucle principal del juego
